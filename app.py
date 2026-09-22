@@ -15,9 +15,13 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, r2_score
 
 from qnn_platform.classical_model import BASELINES, build_baseline
+from qnn_platform.experiments import sweep_dataset_size, sweep_depth, sweep_qubits
 from qnn_platform.preprocessing import infer_task, prepare_dataset
 from qnn_platform.quantum_model import ANSATZE, ENCODINGS, QNNModel
 from qnn_platform.train import train_model
+
+if "run_history" not in st.session_state:
+    st.session_state.run_history = []
 
 st.set_page_config(page_title="QNN Platform", layout="wide")
 st.title("🧪 Interactive Quantum Neural Network Platform")
@@ -37,12 +41,25 @@ df = None
 if uploaded is not None and not use_demo:
     df = pd.read_csv(uploaded)
 elif use_demo:
-    demo_choice = st.selectbox("Demo dataset", ["Iris (classification)", "Diabetes (regression)"])
-    from sklearn.datasets import load_iris, load_diabetes
+    demo_choice = st.selectbox("Demo dataset", [
+        "Iris (classification, 3 classes)",
+        "Wine (classification, 3 classes)",
+        "Breast cancer (classification, binary)",
+        "Diabetes (regression)",
+    ])
+    from sklearn.datasets import load_iris, load_wine, load_breast_cancer, load_diabetes
     if demo_choice.startswith("Iris"):
         data = load_iris(as_frame=True)
         df = data.frame.rename(columns={"target": "species"})
         df["species"] = df["species"].map(dict(enumerate(data.target_names)))
+    elif demo_choice.startswith("Wine"):
+        data = load_wine(as_frame=True)
+        df = data.frame.rename(columns={"target": "cultivar"})
+        df["cultivar"] = df["cultivar"].map(dict(enumerate(data.target_names)))
+    elif demo_choice.startswith("Breast"):
+        data = load_breast_cancer(as_frame=True)
+        df = data.frame.rename(columns={"target": "diagnosis"})
+        df["diagnosis"] = df["diagnosis"].map(dict(enumerate(data.target_names)))
     else:
         data = load_diabetes(as_frame=True)
         df = data.frame
@@ -140,11 +157,14 @@ if run:
                       n_layers=n_layers, task=prepared.task, n_outputs=n_classes,
                       encoding=encoding, ansatz=ansatz)
 
-    with st.expander("Quantum circuit diagram"):
+    with st.expander("Quantum circuit diagram", expanded=True):
         try:
-            st.text(model.qlayer.draw())
+            fig, _ = model.qlayer.draw_mpl()
+            st.pyplot(fig, width="content")
         except Exception as e:
-            st.warning(f"Could not render circuit diagram: {e}")
+            st.warning(f"Could not render circuit diagram as a figure: {e}")
+        with st.expander("Text diagram"):
+            st.text(model.qlayer.draw())
 
     start = time.time()
 
@@ -202,12 +222,6 @@ if run:
     fig_metric.update_layout(title=f"{metric_label} over training", xaxis_title="epoch", height=350)
     st.plotly_chart(fig_metric, width="stretch")
 
-    st.subheader("Effect of qubits / depth / dataset size")
-    st.caption(
-        "Re-run with different values in section 4-5 above to explore this tradeoff "
-        "directly; each run's final metrics are shown above for comparison."
-    )
-
     csv_buf = io.StringIO()
     pd.DataFrame({
         "epoch": range(1, epochs + 1),
@@ -216,3 +230,79 @@ if run:
     }).to_csv(csv_buf, index=False)
     st.download_button("Download training history (CSV)", csv_buf.getvalue(),
                         file_name="qnn_training_history.csv")
+
+    st.session_state.run_history.append({
+        "encoding": encoding, "ansatz": ansatz, "n_qubits": prepared.n_qubits,
+        "n_layers": n_layers, "epochs": epochs, "optimizer": optimizer_name, "lr": lr,
+        "qnn_metric": round(history.val_metric[-1], 4),
+        "baseline": baseline_name, "baseline_metric": round(base_metric, 4),
+        "qnn_time_s": round(qnn_time, 1),
+    })
+
+# --------------------------------------------------------------------------- #
+# 9. Run history across configurations tried this session
+# --------------------------------------------------------------------------- #
+if st.session_state.run_history:
+    st.header("9. Run history")
+    st.caption("Every configuration trained this session, for comparing settings side by side.")
+    hist_df = pd.DataFrame(st.session_state.run_history)
+    st.dataframe(hist_df, width="stretch")
+    if st.button("Clear run history"):
+        st.session_state.run_history = []
+        st.rerun()
+
+# --------------------------------------------------------------------------- #
+# 10. Automated sweep: effect of qubits / depth / dataset size
+# --------------------------------------------------------------------------- #
+st.header("10. Explore: effect of qubits, depth & dataset size")
+st.caption(
+    "Runs several short training jobs (low epoch count, for speed) while varying one "
+    "factor at a time, using the encoding/ansatz/optimizer chosen above."
+)
+sweep_type = st.selectbox("Sweep", ["Number of qubits", "Circuit depth (layers)", "Training-set size"])
+sweep_epochs = st.slider("Epochs per sweep run", 1, 20, 5, key="sweep_epochs")
+
+if st.button("🔬 Run sweep"):
+    prog = st.progress(0.0)
+
+    def cb(i, total):
+        prog.progress(i / total)
+
+    with st.spinner("Running sweep..."):
+        if sweep_type == "Number of qubits":
+            values = [2, 3, 4, 6, 8]
+            results = sweep_qubits(df, target, task, values, n_layers, encoding, ansatz,
+                                    sweep_epochs, batch_size, optimizer_name, lr, test_size,
+                                    progress_cb=cb)
+            x_title = "n_qubits"
+        elif sweep_type == "Circuit depth (layers)":
+            values = [1, 2, 3, 4, 6]
+            results = sweep_depth(df, target, task, n_qubits, values, encoding, ansatz,
+                                   sweep_epochs, batch_size, optimizer_name, lr, test_size,
+                                   progress_cb=cb)
+            x_title = "n_layers"
+        else:
+            values = [0.1, 0.25, 0.5, 0.75, 1.0]
+            results = sweep_dataset_size(df, target, task, n_qubits, n_layers, encoding, ansatz,
+                                          sweep_epochs, batch_size, optimizer_name, lr, test_size,
+                                          values, progress_cb=cb)
+            x_title = "train_fraction"
+
+    metric_label = "Accuracy" if task == "classification" else "R²"
+    xs = [r.value for r in results]
+    ys = [r.val_metric for r in results]
+    times = [r.train_seconds for r in results]
+
+    fig_sweep = go.Figure()
+    fig_sweep.add_trace(go.Scatter(x=xs, y=ys, mode="lines+markers", name=metric_label))
+    fig_sweep.update_layout(title=f"{metric_label} vs {x_title}", xaxis_title=x_title,
+                             yaxis_title=metric_label, height=350)
+    st.plotly_chart(fig_sweep, width="stretch")
+
+    fig_time = go.Figure()
+    fig_time.add_trace(go.Bar(x=xs, y=times, name="training time (s)"))
+    fig_time.update_layout(title=f"Training time vs {x_title}", xaxis_title=x_title,
+                            yaxis_title="seconds", height=300)
+    st.plotly_chart(fig_time, width="stretch")
+
+    st.dataframe(pd.DataFrame({x_title: xs, metric_label: ys, "seconds": times}), width="stretch")
