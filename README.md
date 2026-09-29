@@ -32,7 +32,14 @@ pytest
    auto-detected, and overridable.
 3. **Preprocess**: numeric/categorical columns are auto-identified, imputed,
    one-hot encoded, and scaled; if the dataset has more features than the
-   chosen qubit count, PCA or SelectKBest reduces it down to fit.
+   chosen qubit count, PCA or SelectKBest reduces it down to fit. A
+   **Medical sector profile** runs domain-aware cleaning first: patient
+   identifier/PII columns (patient ID, name, MRN, DOB, contact info) are
+   dropped, missingness on any feature is kept as its own `*_was_missing`
+   flag before imputation (clinically, a missing lab value is often
+   informative rather than random), and numeric outliers are clipped to a
+   wide IQR band to catch data-entry errors without touching real clinical
+   extremes.
 4. **Configure the QNN**: number of qubits, encoding (angle / amplitude /
    IQP), variational ansatz (basic entangler / strongly entangling /
    hardware-efficient), and circuit depth.
@@ -54,6 +61,8 @@ pytest
 
 - `qnn_platform/preprocessing.py` — dataset loading, feature typing, scaling,
   dimensionality reduction.
+- `qnn_platform/medical.py` — medical-sector preprocessing: identifier/PII
+  dropping, missingness indicators, physiological outlier clipping.
 - `qnn_platform/quantum_model.py` — PennyLane encodings/ansätze wrapped as a
   differentiable PyTorch `QNNModel`, plus text/matplotlib circuit diagrams.
 - `qnn_platform/classical_model.py` — scikit-learn baselines.

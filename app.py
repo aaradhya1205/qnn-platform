@@ -88,6 +88,20 @@ with col2:
 # 3. Preprocessing & dimensionality reduction
 # --------------------------------------------------------------------------- #
 st.header("3. Preprocessing")
+
+sector = st.selectbox(
+    "Sector profile", ["General", "Medical"],
+    help="Medical applies domain-aware cleaning before the general pipeline: drops "
+         "patient-identifier/PII columns, keeps 'was this value missing' as its own "
+         "feature before imputing, and clips implausible outlier readings.",
+)
+if sector == "Medical":
+    st.caption(
+        "🏥 Medical profile active: identifier columns (patient ID, name, MRN, DOB, "
+        "contact info, ...) are dropped; missing lab/vital values get a "
+        "'*_was_missing' flag before imputation; numeric outliers are clipped."
+    )
+
 c1, c2, c3 = st.columns(3)
 with c1:
     n_qubits = st.slider("Number of qubits (features fed to circuit)", 2, 10, 4)
@@ -136,9 +150,12 @@ run = st.button("🚀 Prepare data & train", type="primary")
 if run:
     with st.spinner("Preprocessing..."):
         prepared = prepare_dataset(df, target, task, n_qubits,
-                                    reduction_method=reduction_method, scaler=scaler)
+                                    reduction_method=reduction_method, scaler=scaler,
+                                    sector=sector.lower())
     st.success(f"Prepared {prepared.X.shape[0]} samples x {prepared.X.shape[1]} features "
                f"({prepared.task}).")
+    if prepared.dropped_identifier_columns:
+        st.caption(f"🏥 Dropped identifier/PII columns: {', '.join(prepared.dropped_identifier_columns)}")
 
     X_train, X_val, y_train, y_val = train_test_split(
         prepared.X, prepared.y, test_size=test_size, random_state=0,
@@ -232,7 +249,7 @@ if run:
                         file_name="qnn_training_history.csv")
 
     st.session_state.run_history.append({
-        "encoding": encoding, "ansatz": ansatz, "n_qubits": prepared.n_qubits,
+        "sector": sector, "encoding": encoding, "ansatz": ansatz, "n_qubits": prepared.n_qubits,
         "n_layers": n_layers, "epochs": epochs, "optimizer": optimizer_name, "lr": lr,
         "qnn_metric": round(history.val_metric[-1], 4),
         "baseline": baseline_name, "baseline_metric": round(base_metric, 4),
@@ -273,19 +290,19 @@ if st.button("🔬 Run sweep"):
             values = [2, 3, 4, 6, 8]
             results = sweep_qubits(df, target, task, values, n_layers, encoding, ansatz,
                                     sweep_epochs, batch_size, optimizer_name, lr, test_size,
-                                    progress_cb=cb)
+                                    progress_cb=cb, sector=sector.lower())
             x_title = "n_qubits"
         elif sweep_type == "Circuit depth (layers)":
             values = [1, 2, 3, 4, 6]
             results = sweep_depth(df, target, task, n_qubits, values, encoding, ansatz,
                                    sweep_epochs, batch_size, optimizer_name, lr, test_size,
-                                   progress_cb=cb)
+                                   progress_cb=cb, sector=sector.lower())
             x_title = "n_layers"
         else:
             values = [0.1, 0.25, 0.5, 0.75, 1.0]
             results = sweep_dataset_size(df, target, task, n_qubits, n_layers, encoding, ansatz,
                                           sweep_epochs, batch_size, optimizer_name, lr, test_size,
-                                          values, progress_cb=cb)
+                                          values, progress_cb=cb, sector=sector.lower())
             x_title = "train_fraction"
 
     metric_label = "Accuracy" if task == "classification" else "R²"

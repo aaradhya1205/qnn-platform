@@ -24,11 +24,12 @@ class SweepPoint:
 def _train_once(df, target, task, n_qubits, n_layers, encoding, ansatz,
                  epochs, batch_size, optimizer_name, lr, test_size,
                  train_fraction: float = 1.0, reduction_method: str = "pca",
-                 scaler: str = "minmax") -> tuple[float, float]:
+                 scaler: str = "minmax", sector: str = "general") -> tuple[float, float]:
     import time
 
     prepared = prepare_dataset(df, target, task, n_qubits,
-                                reduction_method=reduction_method, scaler=scaler)
+                                reduction_method=reduction_method, scaler=scaler,
+                                sector=sector)
     X_train, X_val, y_train, y_val = train_test_split(
         prepared.X, prepared.y, test_size=test_size, random_state=0,
         stratify=prepared.y if prepared.task == "classification" else None,
@@ -54,11 +55,12 @@ def _train_once(df, target, task, n_qubits, n_layers, encoding, ansatz,
 
 def sweep_qubits(df, target, task, qubit_values, n_layers, encoding, ansatz,
                   epochs, batch_size, optimizer_name, lr, test_size,
-                  progress_cb=None) -> list[SweepPoint]:
+                  progress_cb=None, sector: str = "general") -> list[SweepPoint]:
     results = []
     for i, nq in enumerate(qubit_values):
         metric, secs = _train_once(df, target, task, nq, n_layers, encoding, ansatz,
-                                    epochs, batch_size, optimizer_name, lr, test_size)
+                                    epochs, batch_size, optimizer_name, lr, test_size,
+                                    sector=sector)
         results.append(SweepPoint("n_qubits", nq, metric, secs))
         if progress_cb:
             progress_cb(i + 1, len(qubit_values))
@@ -67,11 +69,12 @@ def sweep_qubits(df, target, task, qubit_values, n_layers, encoding, ansatz,
 
 def sweep_depth(df, target, task, n_qubits, layer_values, encoding, ansatz,
                  epochs, batch_size, optimizer_name, lr, test_size,
-                 progress_cb=None) -> list[SweepPoint]:
+                 progress_cb=None, sector: str = "general") -> list[SweepPoint]:
     results = []
     for i, nl in enumerate(layer_values):
         metric, secs = _train_once(df, target, task, n_qubits, nl, encoding, ansatz,
-                                    epochs, batch_size, optimizer_name, lr, test_size)
+                                    epochs, batch_size, optimizer_name, lr, test_size,
+                                    sector=sector)
         results.append(SweepPoint("n_layers", nl, metric, secs))
         if progress_cb:
             progress_cb(i + 1, len(layer_values))
@@ -80,12 +83,12 @@ def sweep_depth(df, target, task, n_qubits, layer_values, encoding, ansatz,
 
 def sweep_dataset_size(df, target, task, n_qubits, n_layers, encoding, ansatz,
                         epochs, batch_size, optimizer_name, lr, test_size,
-                        fractions, progress_cb=None) -> list[SweepPoint]:
+                        fractions, progress_cb=None, sector: str = "general") -> list[SweepPoint]:
     results = []
     for i, frac in enumerate(fractions):
         metric, secs = _train_once(df, target, task, n_qubits, n_layers, encoding, ansatz,
                                     epochs, batch_size, optimizer_name, lr, test_size,
-                                    train_fraction=frac)
+                                    train_fraction=frac, sector=sector)
         results.append(SweepPoint("train_fraction", frac, metric, secs))
         if progress_cb:
             progress_cb(i + 1, len(fractions))

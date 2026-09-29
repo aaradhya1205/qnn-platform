@@ -12,6 +12,8 @@ from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import LabelEncoder, MinMaxScaler, OneHotEncoder, StandardScaler
 
+from qnn_platform.medical import apply_medical_preprocessing
+
 
 @dataclass
 class PreparedData:
@@ -21,6 +23,7 @@ class PreparedData:
     task: str  # "classification" | "regression"
     class_names: list[str] | None
     n_qubits: int
+    dropped_identifier_columns: list[str] | None = None
 
 
 def infer_column_types(df: pd.DataFrame, target: str) -> tuple[list[str], list[str]]:
@@ -90,9 +93,20 @@ def reduce_dimensionality(X: np.ndarray, y: np.ndarray, task: str, n_components:
 
 
 def prepare_dataset(df: pd.DataFrame, target: str, task: str | None, n_qubits: int,
-                     reduction_method: str = "pca", scaler: str = "minmax") -> PreparedData:
-    """Full pipeline: clean -> encode categoricals -> scale -> reduce to n_qubits features."""
+                     reduction_method: str = "pca", scaler: str = "minmax",
+                     sector: str = "general") -> PreparedData:
+    """Full pipeline: clean -> encode categoricals -> scale -> reduce to n_qubits features.
+
+    sector="medical" runs domain-aware cleaning first: identifier/PII columns
+    are dropped, missingness is preserved as its own feature before
+    imputation, and implausible outlier values are clipped (see
+    qnn_platform.medical)."""
     df = df.dropna(subset=[target]).reset_index(drop=True)
+
+    dropped_identifier_columns = None
+    if sector == "medical":
+        df, dropped_identifier_columns = apply_medical_preprocessing(df, target)
+
     numeric_cols, categorical_cols = infer_column_types(df, target)
     task = task or infer_task(df, target)
 
@@ -120,4 +134,5 @@ def prepare_dataset(df: pd.DataFrame, target: str, task: str | None, n_qubits: i
     return PreparedData(
         X=X_reduced, y=y, feature_names=feature_names, task=task,
         class_names=class_names, n_qubits=X_reduced.shape[1],
+        dropped_identifier_columns=dropped_identifier_columns,
     )
