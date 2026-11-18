@@ -40,3 +40,13 @@ def test_regression_training_runs_end_to_end():
     history = train_model(model, X[:20], y[:20], X[20:], y[20:], task="regression",
                            epochs=3, batch_size=8, optimizer_name="adam", lr=0.1)
     assert len(history.val_metric) == 3
+
+
+def test_regression_with_large_target_scale_beats_predicting_the_mean():
+    rng = np.random.RandomState(0)
+    X = (rng.rand(80, 3) * np.pi).astype(np.float32)
+    y = 150 + 60 * np.cos(X[:, 0]) + rng.normal(0, 3, 80)  # target in the hundreds
+    model = QNNModel(n_features=3, n_qubits=3, n_layers=2, task="regression")
+    history = train_model(model, X[:60], y[:60], X[60:], y[60:], task="regression",
+                           epochs=40, batch_size=16, optimizer_name="adam", lr=0.1)
+    assert history.val_metric[-1] > 0.3  # R^2; unscaled targets used to give strongly negative values

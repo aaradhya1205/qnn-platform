@@ -47,6 +47,12 @@ def train_model(model, X_train, y_train, X_val, y_val, task: str, n_classes: int
         y_val_t = torch.tensor(y_val, dtype=torch.long)
         loss_fn = torch.nn.BCEWithLogitsLoss() if n_classes <= 2 else torch.nn.CrossEntropyLoss()
     else:
+        # Standardise the target with training statistics so a target in the hundreds
+        # (e.g. disease progression) is learnable; R^2 is unchanged by this affine rescaling.
+        y_mean, y_std = float(np.mean(y_train)), float(np.std(y_train)) or 1.0
+        model.target_mean, model.target_std = y_mean, y_std
+        y_train = (np.asarray(y_train, dtype=float) - y_mean) / y_std
+        y_val = (np.asarray(y_val, dtype=float) - y_mean) / y_std
         y_train_t = torch.tensor(y_train, dtype=torch.float32).view(-1, 1)
         y_val_t = torch.tensor(y_val, dtype=torch.float32).view(-1, 1)
         loss_fn = torch.nn.MSELoss()

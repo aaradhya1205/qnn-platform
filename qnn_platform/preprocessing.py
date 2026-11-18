@@ -24,6 +24,21 @@ class PreparedData:
     class_names: list[str] | None
     n_qubits: int
     dropped_identifier_columns: list[str] | None = None
+    dropped_high_cardinality: list[str] | None = None
+
+
+def drop_high_cardinality_text(df: pd.DataFrame, target: str, min_unique: int = 30,
+                               max_ratio: float = 0.5) -> tuple[pd.DataFrame, list[str]]:
+    """Drop text columns whose values are almost all different (names, URLs, dates, ids):
+    one-hot encoding them would create thousands of useless columns."""
+    dropped = []
+    for col in df.columns:
+        if col == target or df[col].dtype.kind in "iufb":
+            continue
+        n_unique = df[col].nunique(dropna=True)
+        if n_unique >= min_unique and n_unique / max(len(df), 1) > max_ratio:
+            dropped.append(col)
+    return df.drop(columns=dropped), dropped
 
 
 def infer_column_types(df: pd.DataFrame, target: str) -> tuple[list[str], list[str]]:
@@ -107,6 +122,8 @@ def prepare_dataset(df: pd.DataFrame, target: str, task: str | None, n_qubits: i
     if sector == "medical":
         df, dropped_identifier_columns = apply_medical_preprocessing(df, target)
 
+    df, dropped_high_cardinality = drop_high_cardinality_text(df, target)
+
     numeric_cols, categorical_cols = infer_column_types(df, target)
     task = task or infer_task(df, target)
 
@@ -135,4 +152,5 @@ def prepare_dataset(df: pd.DataFrame, target: str, task: str | None, n_qubits: i
         X=X_reduced, y=y, feature_names=feature_names, task=task,
         class_names=class_names, n_qubits=X_reduced.shape[1],
         dropped_identifier_columns=dropped_identifier_columns,
+        dropped_high_cardinality=dropped_high_cardinality or None,
     )

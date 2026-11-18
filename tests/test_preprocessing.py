@@ -52,3 +52,16 @@ def test_prepare_dataset_drops_rows_with_missing_target():
     df.loc[0, "species"] = None
     prepared = prepare_dataset(df, "species", "classification", n_qubits=4)
     assert prepared.X.shape[0] == 149
+
+
+def test_high_cardinality_text_columns_are_dropped_automatically():
+    n = 120
+    df = pd.DataFrame({
+        "player_name": [f"Player {i}" for i in range(n)],     # all different -> useless when one-hot encoded
+        "country": ["A", "B", "C"] * (n // 3),
+        "runs": np.arange(n, dtype=float),
+        "label": ["x", "y"] * (n // 2),
+    })
+    prepared = prepare_dataset(df, "label", "classification", n_qubits=3)
+    assert prepared.dropped_high_cardinality == ["player_name"]
+    assert prepared.X.shape[0] == n

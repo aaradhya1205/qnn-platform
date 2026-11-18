@@ -1,21 +1,83 @@
-# Interactive QNN Platform
+# QNN Studio
 
-A Streamlit app for applying Quantum Neural Networks to classification and
-regression problems without writing quantum circuit code.
+**A no-code workspace to learn and benchmark quantum neural networks.**
+Bring a small table of data, see exactly how a quantum model is cleaned, built, trained and tested, and compare it fairly with classical machine learning. No quantum programming needed.
 
-## Setup
+![Home](docs/screenshots/home.png)
+
+## The use case
+
+Two things make quantum neural networks (QNNs) hard to try: they need specialist skills, and real datasets are bigger than today's quantum machines. QNN Studio hides the first and shrinks the second, so what is left is the question that matters: **is a quantum model any good on my data?**
+
+It has two workspaces, one for each audience:
+
+| | Research Workbench | Learning Lab |
+|---|---|---|
+| For | researchers and early-stage studies | students and instructors |
+| Does | a complete, leakage-free study on your own CSV | seven short hands-on lessons with quizzes |
+| Output | verdict, leaderboard, sweeps, exportable report | understanding, with a glossary of full forms |
+
+## Quick start
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
+python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-```
-
-## Run
-
-```bash
 streamlit run app.py
 ```
+
+## Research Workbench: seven steps
+
+1. **Data**: upload a CSV or load a curated dataset (including a deliberately messy clinical table). Target and task are detected for you.
+2. **Clean**: a 0 to 100 data-quality score, a prioritised problem list, one-click fixes and an audit trail of every change (duplicates, gaps, numbers stored as text, ID-like and constant columns, extreme values).
+3. **Prepare**: split first, then fit everything that learns from data on the training rows only: gap filling, outlier limits, scaling, PCA or feature selection. Optional Medical profile.
+4. **Model**: choose the encoding (angle, amplitude, IQP), the circuit type and the depth. See the circuit before you train it.
+5. **Train and compare**: the quantum model and four classical models (logistic or ridge regression, SVM, small neural net, random forest) over several random splits, with a plain-English verdict.
+6. **Experiments**: sweep qubits, depth, training-set size, encoding or circuit type, with a spread at every point.
+7. **Report**: Markdown report, per-run CSV and a settings file, so the study can be repeated.
+
+![Cleaning](docs/screenshots/cleaning.png)
+![Results](docs/screenshots/results.png)
+
+## Learning Lab
+
+Measure a qubit, clean a messy table, turn a number into a qubit angle, read a circuit and count its adjustable angles, watch three learning rates train, compare models honestly, and spot over-claims. Each lesson ends with a question, and a searchable glossary spells out every acronym.
+
+![Learning Lab](docs/screenshots/learning_lab.png)
+
+## Why the results can be trusted
+
+* **No data leakage.** Gap filling, scaling, PCA and outlier limits are learned from training rows only and then applied to the held-out rows (`qnn_platform/workflow.py`, tested in `tests/test_workflow.py`).
+* **Spread, not luck.** Every number is a mean over several random splits with its spread, plus a confidence interval.
+* **Honest verdicts.** "Ahead", "comparable" or "behind" comes from a *paired* 95% confidence interval over the runs. The tool never claims a quantum advantage on its own.
+* **Audit trail.** Every cleaning step records rows and columns before and after. Reports include seeds and settings.
+
+Benchmark on five datasets (5 random splits each) is stored in `data/benchmark_results.json` and reproduced with:
+
+```bash
+python scripts/run_benchmark.py        # about 5 minutes
+```
+
+## Layout
+
+```
+app.py                     router and navigation
+views/home.py              use case, evidence, safeguards
+views/research.py          Research Workbench
+views/learning.py          Learning Lab
+qnn_platform/
+  cleaning.py              data profiling, quality score, structural + fitted cleaning
+  workflow.py              leakage-free preparation, studies, sweeps, verdicts
+  quantum_model.py         PennyLane circuits wrapped as PyTorch layers
+  classical_model.py       classical baselines
+  demo_data.py             curated and lesson datasets
+  ui.py                    design system
+  lab_content.py           glossary and lesson list
+data/benchmark_results.json
+scripts/run_benchmark.py
+tests/                     pytest suite (unit and end-to-end page tests)
+```
+
+An optional, separate quantum image classification demo is in `image_dashboard.py` (`streamlit run image_dashboard.py`).
 
 ## Tests
 
@@ -24,59 +86,10 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
-## What it does
+## Limits and responsible use
 
-1. **Upload** a CSV, or use one of the built-in demos: Iris (3-class),
-   Wine (3-class), Breast cancer (binary), Diabetes (regression).
-2. **Pick a target column** — task type (classification/regression) is
-   auto-detected, and overridable.
-3. **Preprocess**: numeric/categorical columns are auto-identified, imputed,
-   one-hot encoded, and scaled; if the dataset has more features than the
-   chosen qubit count, PCA or SelectKBest reduces it down to fit. A
-   **Medical sector profile** runs domain-aware cleaning first: patient
-   identifier/PII columns (patient ID, name, MRN, DOB, contact info) are
-   dropped, missingness on any feature is kept as its own `*_was_missing`
-   flag before imputation (clinically, a missing lab value is often
-   informative rather than random), and numeric outliers are clipped to a
-   wide IQR band to catch data-entry errors without touching real clinical
-   extremes.
-4. **Configure the QNN**: number of qubits, encoding (angle / amplitude /
-   IQP), variational ansatz (basic entangler / strongly entangling /
-   hardware-efficient), and circuit depth.
-5. **Train** with configurable epochs, mini-batch size, optimizer
-   (Adam/SGD/RMSprop), and learning rate, with live loss/metric charts.
-6. **Compare** against a classical baseline (logistic/ridge, MLP, or random
-   forest) trained on the same data split.
-7. **Inspect** the rendered circuit diagram (visual + text) and download the
-   training history as CSV.
-8. **Track run history**: every configuration trained in the session is kept
-   in a comparison table, so different settings can be judged side by side.
-9. **Run automated sweeps**: vary number of qubits, circuit depth, or
-   training-set size while holding everything else fixed, and see accuracy
-   (or R²) and training time plotted against each factor — directly answers
-   "what does more qubits / depth / data actually buy me?" without manually
-   re-running the app for every combination.
+Quantum circuits run on a classical **simulator**, not on quantum hardware. The datasets are small and public, and results may not carry over to other data. QNN Studio is for learning and research: do not use its output for clinical, financial or safety decisions. No user study has been run yet, so the learning benefit is a plan, not a measurement. A "comparable" result is not evidence of quantum advantage.
 
-## Structure
+## Sources behind the use case
 
-- `qnn_platform/preprocessing.py` — dataset loading, feature typing, scaling,
-  dimensionality reduction.
-- `qnn_platform/medical.py` — medical-sector preprocessing: identifier/PII
-  dropping, missingness indicators, physiological outlier clipping.
-- `qnn_platform/quantum_model.py` — PennyLane encodings/ansätze wrapped as a
-  differentiable PyTorch `QNNModel`, plus text/matplotlib circuit diagrams.
-- `qnn_platform/classical_model.py` — scikit-learn baselines.
-- `qnn_platform/train.py` — mini-batch training loop shared by all tasks.
-- `qnn_platform/experiments.py` — qubit/depth/dataset-size sweep utilities.
-- `app.py` — the Streamlit UI.
-- `tests/` — pytest suite covering preprocessing, the QNN model, training,
-  and classical baselines.
-
-## Notes
-
-- Requires `pandas<3.0` — pandas 3.0's new default string dtype currently
-  crashes on `numpy>=2.4` when checking column types via `np.issubdtype`.
-- `default.qubit` (PennyLane's simulator) is used; qubit counts above ~12-14
-  will get slow since it's a full state-vector simulation.
-- Sweeps train with a reduced epoch count for speed — treat the resulting
-  trend as indicative, not a fully-converged comparison.
+Bowles, Ahmed, Schuld (2024) *Better than classical?* [arXiv:2403.07059](https://arxiv.org/abs/2403.07059) · Kölle et al. (2023) [arXiv:2311.05559](https://arxiv.org/abs/2311.05559) · Leither et al. (2026) [arXiv:2608.11373](https://arxiv.org/abs/2608.11373) · Schuld, Killoran (2022) [arXiv:2203.01340](https://arxiv.org/abs/2203.01340) · Preskill (2018) [arXiv:1801.00862](https://arxiv.org/abs/1801.00862) · [Terra Quantum TQ42 Studio](https://thequantuminsider.com/2025/04/14/terra-quantum-launches-tq42-studio-supports-no-code-quantum-ai-development-in-closed-beta/) · [Bloq Quantum](https://quantumcomputingreport.com/bloq-quantum-launches-no-code-platform-to-accelerate-algorithm-development/)

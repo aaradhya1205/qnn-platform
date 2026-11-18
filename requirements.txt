@@ -1,8 +1,10 @@
-streamlit>=1.32
-pennylane>=0.36
+streamlit>=1.50
+pennylane>=0.43
 torch>=2.2
 scikit-learn>=1.4
 pandas>=2.2,<3.0
 numpy>=1.26
 matplotlib>=3.8
 plotly>=5.20
+pillow>=10.0
+scipy>=1.11

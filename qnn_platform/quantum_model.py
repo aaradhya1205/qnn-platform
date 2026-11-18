@@ -89,12 +89,12 @@ class QNNLayer(nn.Module):
         weights = torch.zeros(weight_shape(self.ansatz, self.n_qubits, self.n_layers))
         return qml.draw(self.circuit)(sample_input, weights)
 
-    def draw_mpl(self, sample_input=None):
+    def draw_mpl(self, sample_input=None, **style_kwargs):
         """Return a (fig, ax) matplotlib rendering of the circuit for a representative input."""
         if sample_input is None:
-            sample_input = torch.zeros(self.n_qubits)
+            sample_input = torch.ones(self.n_qubits)
         weights = torch.zeros(weight_shape(self.ansatz, self.n_qubits, self.n_layers))
-        return qml.draw_mpl(self.circuit)(sample_input, weights)
+        return qml.draw_mpl(self.circuit, **style_kwargs)(sample_input, weights)
 
 
 class QNNModel(nn.Module):
